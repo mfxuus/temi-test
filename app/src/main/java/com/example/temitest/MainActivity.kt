@@ -12,6 +12,44 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.temitest.ui.theme.TemiTestTheme
 
+
+import io.ktor.serialization.kotlinx.*
+import kotlinx.serialization.json.*
+
+import io.ktor.client.*
+import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.websocket.*
+import io.ktor.http.*
+import io.ktor.websocket.*
+import kotlinx.coroutines.*
+import java.util.*
+//...
+fun websocket() {
+    val client = HttpClient(OkHttp) {
+        install(WebSockets) {
+//            contentConverter = KotlinxWebsocketSerializationConverter(Json)
+        }
+    }
+    runBlocking {
+        client.webSocket(method = HttpMethod.Get, host = "10.0.2.2", port = 9090, path = "/green") {
+            while(true) {
+                val othersMessage = incoming.receive() as? Frame.Text
+                val strOtherMessage = othersMessage?.readText()
+                println(strOtherMessage)
+                send(strOtherMessage + "abc")
+//                val myMessage = Scanner(System.`in`).next()
+//                if(myMessage != null) {
+//                    send(myMessage)
+//                }
+            }
+        }
+    }
+    client.close()
+}
+
+
+
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,6 +64,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        websocket()
     }
 }
 
