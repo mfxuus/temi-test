@@ -23,29 +23,36 @@ import io.ktor.http.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import java.util.*
+
+
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
 //...
-fun websocket() {
-    val client = HttpClient(OkHttp) {
-        install(WebSockets) {
-//            contentConverter = KotlinxWebsocketSerializationConverter(Json)
-        }
-    }
-    runBlocking {
-        client.webSocket(method = HttpMethod.Get, host = "10.0.2.2", port = 9090, path = "/green") {
-            while(true) {
-                val othersMessage = incoming.receive() as? Frame.Text
-                val strOtherMessage = othersMessage?.readText()
-                println(strOtherMessage)
-                send(strOtherMessage + "abc")
-//                val myMessage = Scanner(System.`in`).next()
-//                if(myMessage != null) {
-//                    send(myMessage)
-//                }
-            }
-        }
-    }
-    client.close()
-}
+//fun websocket() {
+//    val client = HttpClient(OkHttp) {
+//        install(WebSockets) {
+////            contentConverter = KotlinxWebsocketSerializationConverter(Json)
+//        }
+//    }
+//    runBlocking {
+//        client.webSocket(method = HttpMethod.Get, host = "10.0.2.2", port = 9090, path = "/green") {
+//            while(true) {
+//                val othersMessage = incoming.receive() as? Frame.Text
+//                val strOtherMessage = othersMessage?.readText()
+//                println(strOtherMessage)
+//                send(strOtherMessage + "abc")
+////                val myMessage = Scanner(System.`in`).next()
+////                if(myMessage != null) {
+////                    send(myMessage)
+////                }
+//            }
+//        }
+//    }
+//    client.close()
+//}
 
 
 
@@ -64,7 +71,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        websocket()
+        // Call the WebSocket function inside a coroutine
+        lifecycleScope.launch {
+            startWebSocket()
+        }
     }
 }
 
@@ -81,5 +91,41 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 fun GreetingPreview() {
     TemiTestTheme {
         Greeting("Android")
+    }
+}
+
+
+
+
+private suspend fun startWebSocket() {
+    val client = HttpClient(OkHttp) {
+        install(WebSockets)
+    }
+
+    try {
+        client.webSocket(
+            method = HttpMethod.Get,
+            host = "10.0.2.2",
+            port = 9090,
+            path = "/green"
+        ) {
+            for (message in incoming) {
+                when (message) {
+                    is Frame.Text -> {
+                        val receivedText = message.readText()
+                        withContext(Dispatchers.Main) {
+                            println("Received: $receivedText")
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    } catch (e: Exception) {
+        withContext(Dispatchers.Main) {
+            println("WebSocket Error: ${e.message}")
+        }
+    } finally {
+        client.close()
     }
 }
