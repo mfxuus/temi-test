@@ -44,6 +44,25 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
+//temi
+import com.robotemi.sdk.Robot;
+import com.robotemi.sdk.TtsRequest;
+import com.robotemi.sdk.TtsRequest.Status;
+
+
+import com.robotemi.sdk.constants.*;
+import com.robotemi.sdk.SttLanguage;
+import com.robotemi.sdk.listeners.OnMovementStatusChangedListener;
+import com.robotemi.sdk.permission.Permission;
+import com.robotemi.sdk.telepresence.*;
+import com.robotemi.sdk.Robot.TtsListener;
+import com.robotemi.sdk.Robot.AsrListener;
+import com.robotemi.sdk.listeners.OnBeWithMeStatusChangedListener;
+import com.robotemi.sdk.listeners.OnConstraintBeWithStatusChangedListener;
+import com.robotemi.sdk.UserInfo;
+import com.robotemi.sdk.listeners.OnGoToLocationStatusChangedListener;
+import com.robotemi.sdk.listeners.OnDetectionStateChangedListener;
+
 
 @Serializable
 data class MessageData(
@@ -53,13 +72,30 @@ data class MessageData(
 
 
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(),
+    AsrListener {
+
+        private val robot = Robot.getInstance()
+    override fun onAsrResult (asrResult: String, sttLanguage: SttLanguage) {
+        // Implementation of Robot.NlpListener method
+        println("got message. stop listening.")
+        robot.finishConversation()
+        lifecycleScope.launch {
+            sendWebSocketMessage(asrResult)
+        }
+    }
+
     private val latestMessage = MutableStateFlow("")
     private val messages = mutableStateListOf<String>()
     private var webSocketSession: DefaultClientWebSocketSession? = null
     private val sessionMutex = Mutex()
 
 
+    override fun onStart() {
+        super.onStart()
+        robot.addAsrListener(this)
+        robot.requestToBeKioskApp()
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -72,6 +108,7 @@ class MainActivity : ComponentActivity() {
                     WebSocketUI(
                         latestMessage = latestMessage.asStateFlow(),
                         messages = messages,
+                        robot = robot,
                         onSendMessage = { sendMessage ->
                             lifecycleScope.launch {
                                 sendWebSocketMessage(sendMessage)
@@ -83,22 +120,25 @@ class MainActivity : ComponentActivity() {
         }
         // Call the WebSocket function inside a coroutine
         lifecycleScope.launch {
-            startWebSocket()
+            startWebSocket(robot=robot)
         }
     }
 
-    private suspend fun startWebSocket() {
+    override fun onStop() {
+        super.onStop()
+        robot.removeAsrListener(this)
+    }
+    private suspend fun startWebSocket(robot: Robot) {
         val client = HttpClient(OkHttp) {
             install(WebSockets)
         }
-
         try {
             client.webSocket(
                 method = HttpMethod.Get,
 //                host = "10.0.2.2",
 //                port = 9090,
 //                path = "/green"
-                  host = "192.168.68.127",
+                  host = "10.134.71.195",
                   port = 9090,
                   path = "/temi"
             ) {
@@ -122,6 +162,7 @@ class MainActivity : ComponentActivity() {
                                         - Data: ${parsedData.data}
                                     """.trimIndent()
                                     )
+                                    robot.speak(TtsRequest.create(parsedData.data, false));
                                 }
                             } catch (e: SerializationException) {
                                 // Handle non-JSON or malformed data
@@ -167,6 +208,7 @@ class MainActivity : ComponentActivity() {
 fun WebSocketUI(
     latestMessage: StateFlow<String>,
     messages: List<String>,
+    robot: Robot,
     onSendMessage: (String) -> Unit
 ) {
     val message by latestMessage.collectAsState()
@@ -223,6 +265,24 @@ fun WebSocketUI(
             }) {
                 Text("Send")
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Button(onClick = {
+                robot.wakeup()
+            }) {
+                Text("Start Listen")
+            }
+            Spacer(modifier = Modifier.width(36.dp))
+            Button(onClick = {
+                robot.setKioskModeOn(false)
+            }) {
+                Text("Exit Kiosk Mode [Not working]")
+            }
+
+
         }
     }
 
